@@ -47,6 +47,32 @@ jobs:
             unzip -q CODIGO_FUENTE*.zip -d fuente
           fi
 
+      - name: Parchear CMakeLists (archivos nuevos + --wrap)
+        run: |
+          C=$(find . -path '*misc/android/app/CMakeLists.txt' | head -1)
+          [ -z "$C" ] && { echo "ERROR: no se encontro CMakeLists.txt"; exit 1; }
+          cat > /tmp/patch_cmake.py <<'PYEOF'
+          import sys, re
+          p = sys.argv[1]
+          s = open(p).read()
+          new = ["AutoReconnect","CpsCmd","CrashCmd","Favs","FeedbackCmd","MusicCmd",
+                 "NoPitch","OmniCmd","RichCmd","TranslateCmd","WpCmd"]
+          anchor = "        ../../../src/Commands.c\n"
+          assert anchor in s, "no se encontro Commands.c en CMakeLists"
+          add = "".join("        ../../../src/%s.c\n" % n for n in new
+                        if "src/%s.c" % n not in s)
+          s = s.replace(anchor, anchor + add, 1)
+          if "--wrap=" not in s:
+              s += """
+          # Funciones envueltas con -Wl,--wrap (CrashCmd.c y OmniCmd.c)
+          set_target_properties(classicube PROPERTIES LINK_FLAGS
+              "-Wl,--wrap=Logger_DoAbort -Wl,--wrap=Process_Abort2 -Wl,--wrap=World_SetBlock")
+          """
+          open(p, "w").write(s)
+          print("CMakeLists parcheado")
+          PYEOF
+          python3 /tmp/patch_cmake.py "$C"
+
       - name: Compilar APK
         run: |
           G=$(find . -path '*misc/android/gradlew' | head -1)
