@@ -53,7 +53,22 @@ jobs:
           [ -z "$G" ] && { echo "ERROR: no se encontro misc/android/gradlew"; exit 1; }
           cd "$(dirname "$G")"
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          set +e
+          ./gradlew assembleDebug --stacktrace --console=plain > "$GITHUB_WORKSPACE/build.log" 2>&1
+          RC=$?
+          echo "=== RESUMEN DEL ERROR (exit $RC) ==="
+          grep -n -i -B2 -A12 "FAILURE:\|What went wrong\|error:\|Caused by" "$GITHUB_WORKSPACE/build.log" | head -n 80
+          echo "=== ULTIMAS 40 LINEAS ==="
+          tail -n 40 "$GITHUB_WORKSPACE/build.log"
+          exit $RC
+
+      - name: Subir log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
