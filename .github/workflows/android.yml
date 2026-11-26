@@ -1,0 +1,55 @@
+name: Android APK
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      # Gradle 5.6.4 + Android plugin 3.6.4 solo funcionan con Java 8-11
+      - name: Configurar Java 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 11
+
+      - name: Instalar SDK, CMake y NDK
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-28" "build-tools;28.0.3" \
+                  "cmake;3.10.2.4988404" "ndk;25.2.9519653"
+
+      - name: Reparar herramientas strip del NDK
+        run: |
+          NDK_BIN="$ANDROID_HOME/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          chmod +x "$NDK_BIN/llvm-strip"
+          for t in arm-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android; do
+            ln -sf llvm-strip "$NDK_BIN/$t-strip"
+          done
+
+      - name: Extraer codigo fuente (si viene en zip)
+        run: |
+          if ls CODIGO_FUENTE*.zip >/dev/null 2>&1; then
+            unzip -q CODIGO_FUENTE*.zip -d fuente
+          fi
+
+      - name: Compilar APK
+        run: |
+          G=$(find . -path '*misc/android/gradlew' | head -1)
+          [ -z "$G" ] && { echo "ERROR: no se encontro misc/android/gradlew"; exit 1; }
+          cd "$(dirname "$G")"
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassiEmicx-apk
+          path: '**/app/build/outputs/apk/debug/*.apk'
+          if-no-files-found: error
